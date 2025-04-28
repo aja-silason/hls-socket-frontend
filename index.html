@@ -9,6 +9,28 @@
   </head>
   <body>
     <div id="root"></div>
+    <video id="local-video" controls autoPlay muted ></video>
+
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      const constraints = {
+        video: true,  // Ou false se você não quiser vídeo
+        audio: true   // Ou false se não quiser áudio
+      };
+
+      let localStream;
+
+      async function startStream() {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia(constraints);
+          localStream = stream;
+          document.getElementById('local-video').srcObject = stream;
+        } catch (err) {
+          console.error("Erro ao acessar a câmera/microfone: ", err);
+        }
+      }
+
+      startStream();
+    </script>
   </body>
 </html>
