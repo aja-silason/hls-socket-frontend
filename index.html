@@ -9,7 +9,12 @@
   </head>
   <body>
     <div id="root"></div>
-    <video id="local-video" controls autoPlay muted ></video>
+    <!-- <video id="local-video" controls autoPlay muted ></video> -->
+    <!-- <video id="remote-video" autoplay></video> -->
+
+    <button onclick="startCall()">Start Call</button>
+
+    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
 
     <script type="module" src="/src/main.tsx"></script>
     <script>
@@ -31,6 +36,78 @@
       }
 
       startStream();
+
+      function startCall() {
+        startStream();
+        createPeerConnection();
+        createOffer();
+      }
+
+
+
+      let peerConnection;
+      let remoteStream;
+
+      // Configuração do ICE (candidate gathering)
+      const iceConfiguration = {
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] // Usando um servidor STUN público
+      };
+
+      // Criar a conexão
+      function createPeerConnection() {
+        peerConnection = new RTCPeerConnection(iceConfiguration);
+
+        // Adicionar o stream local à conexão
+        localStream.getTracks().forEach(track => {
+          peerConnection.addTrack(track, localStream);
+        });
+
+        // Manipular stream remoto
+        peerConnection.ontrack = (event) => {
+          remoteStream = event.streams[0];
+          document.getElementById('remote-video').srcObject = remoteStream;
+        };
+
+        // Coletando candidatos ICE
+        peerConnection.onicecandidate = (event) => {
+          if (event.candidate) {
+            // Enviar candidato ICE para o servidor via WebSocket
+            socket.emit('candidate', { candidate: event.candidate, target: 'roomId' });
+          }
+        };
+      }
+
+        // Criar oferta
+        async function createOffer() {
+          const offer = await peerConnection.createOffer();
+          await peerConnection.setLocalDescription(offer);
+
+          // Enviar a oferta via WebSocket para o servidor
+          socket.emit('offer', { offer: offer, target: 'roomId' });
+        }
+
+        // Receber oferta e responder
+        socket.on('offer', async (offer) => {
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+          const answer = await peerConnection.createAnswer();
+          await peerConnection.setLocalDescription(answer);
+
+          socket.emit('answer', { answer: answer, target: offer.sender });
+        });
+
+        // Receber resposta
+        socket.on('answer', async (answer) => {
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        });
+
+        // Receber candidatos ICE
+        socket.on('candidate', async (candidate) => {
+          try {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (e) {
+            console.error('Erro ao adicionar candidato ICE: ', e);
+          }
+        });
     </script>
   </body>
 </html>
